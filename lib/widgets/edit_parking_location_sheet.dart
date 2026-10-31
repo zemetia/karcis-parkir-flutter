@@ -8,6 +8,7 @@ import '../providers/parking_provider.dart';
 import '../services/location_service.dart';
 import '../services/photo_service.dart';
 import 'parking_photo_viewer.dart';
+import 'location_picker_sheet.dart';
 
 class EditParkingLocationSheet extends StatefulWidget {
   final ParkingTicket ticket;
@@ -31,6 +32,7 @@ class EditParkingLocationSheet extends StatefulWidget {
 }
 
 class _EditParkingLocationSheetState extends State<EditParkingLocationSheet> {
+  late TextEditingController _locationController;
   late TextEditingController _floorController;
   late TextEditingController _blockController;
   String? _photoPath;
@@ -65,6 +67,7 @@ class _EditParkingLocationSheetState extends State<EditParkingLocationSheet> {
   @override
   void initState() {
     super.initState();
+    _locationController = TextEditingController(text: widget.ticket.locationName ?? '');
     _floorController = TextEditingController(text: widget.ticket.parkingFloor ?? '');
     _blockController = TextEditingController(text: widget.ticket.parkingBlock ?? '');
     _photoPath = widget.ticket.parkingPhotoPath;
@@ -74,6 +77,7 @@ class _EditParkingLocationSheetState extends State<EditParkingLocationSheet> {
 
   @override
   void dispose() {
+    _locationController.dispose();
     _floorController.dispose();
     _blockController.dispose();
     super.dispose();
@@ -160,11 +164,14 @@ class _EditParkingLocationSheetState extends State<EditParkingLocationSheet> {
   Future<void> _handleSave() async {
     final provider = Provider.of<ParkingProvider>(context, listen: false);
 
+    final locationName = _locationController.text.trim();
     final floor = _floorController.text.trim();
     final block = _blockController.text.trim();
 
     await provider.updateParkingLocation(
       widget.ticket.id,
+      locationName: locationName.isNotEmpty ? locationName : null,
+      clearLocationName: locationName.isEmpty,
       parkingFloor: floor.isNotEmpty ? floor : null,
       clearParkingFloor: floor.isEmpty,
       parkingBlock: block.isNotEmpty ? block : null,
@@ -250,6 +257,36 @@ class _EditParkingLocationSheetState extends State<EditParkingLocationSheet> {
               style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
             ),
             const SizedBox(height: 16),
+
+            // Lokasi / Template Parkir
+            TextField(
+              controller: _locationController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Lokasi / Nama Gedung',
+                hintText: 'Mall PTC, Grand Indonesia, dll',
+                prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.bookmark_border_rounded, color: Color(0xFF2563EB)),
+                  tooltip: 'Pilih Template Lokasi',
+                  onPressed: () async {
+                    final picked = await LocationPickerSheet.show(
+                      context,
+                      currentLocation: _locationController.text.trim(),
+                      vehicleType: widget.ticket.vehicleType,
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _locationController.text = picked.name;
+                      });
+                    }
+                  },
+                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+            const SizedBox(height: 12),
 
             // Field Lantai & Blok Parkir
             Row(

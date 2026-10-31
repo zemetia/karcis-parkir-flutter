@@ -10,6 +10,7 @@ import 'history_screen.dart';
 import 'scan_screen.dart';
 import 'settings_screen.dart';
 import 'ticket_detail_screen.dart';
+import 'location_templates_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
         final provider = Provider.of<ParkingProvider>(context, listen: false);
         if (provider.settings.notificationsEnabled) {
           NotificationService().requestPermissions();
+        }
+        final pendingTicketId = NotificationService().consumePendingTicketId();
+        if (pendingTicketId != null) {
+          NotificationService.navigateToTicket(pendingTicketId);
         }
       }
     });
@@ -111,6 +116,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
         centerTitle: false,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.location_on_outlined, size: 22),
+            tooltip: 'Lokasi & Template Parkir',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const LocationTemplatesScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.receipt_long_rounded, size: 22),
             tooltip: 'Rekap Pengeluaran',

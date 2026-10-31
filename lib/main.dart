@@ -41,6 +41,7 @@ class KarcisParkirApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: NotificationService.navigatorKey,
       title: 'Karcis Parkir',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

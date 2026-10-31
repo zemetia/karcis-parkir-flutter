@@ -37,6 +37,24 @@ void main() {
       expect(id, lessThan(2147483647));
       expect(id, greaterThanOrEqualTo(0));
     });
+
+    test('generateLiveNotificationId creates stable base ID with reminder index 0', () {
+      final service = NotificationService();
+      final ticketId = 'test-ticket-live-123';
+      final liveId = service.generateLiveNotificationId(ticketId);
+      final expectedBase = (ticketId.hashCode.abs() % 20000000) * 100;
+      expect(liveId, equals(expectedBase));
+    });
+
+    test('Pending ticket ID for cold start is handled and consumed cleanly', () {
+      final service = NotificationService();
+      service.setPendingTicketId('ticket-cold-start-999');
+      expect(service.pendingTicketId, equals('ticket-cold-start-999'));
+
+      final consumed = service.consumePendingTicketId();
+      expect(consumed, equals('ticket-cold-start-999'));
+      expect(service.pendingTicketId, isNull);
+    });
   });
 
   group('Timezone Detection & Fallback Tests', () {

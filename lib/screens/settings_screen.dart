@@ -5,6 +5,7 @@ import '../models/parking_rate_rule.dart';
 import '../providers/parking_provider.dart';
 import '../services/notification_service.dart';
 import 'expense_dashboard_screen.dart';
+import 'location_templates_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -286,13 +287,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
                   subtitle: const Text(
-                    'Pemberitahuan otomatis saat durasi parkir tercapai',
+                    'Durasi berjalan di status bar & pengingat batas waktu tarif',
                     style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                   ),
                   value: _notificationsEnabled,
                   onChanged: (val) async {
                     if (val) {
-                      await NotificationService().requestPermissions();
+                      final messenger = ScaffoldMessenger.of(context);
+                      final granted = await NotificationService().requestPermissions();
+                      if (!mounted) return;
+                      if (!granted) {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text('Izin notifikasi belum diaktifkan di pengaturan perangkat.'),
+                            backgroundColor: Color(0xFFDC2626),
+                          ),
+                        );
+                      }
                     }
                     setState(() {
                       _notificationsEnabled = val;
@@ -519,6 +530,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               );
             },
+          ),
+
+          const SizedBox(height: 12),
+
+          // Shortcut to Location Templates Screen
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Color(0xFFBFDBFE), width: 1.2),
+            ),
+            color: const Color(0xFFEFF6FF),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const LocationTemplatesScreen()),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.location_on_rounded, color: Color(0xFF2563EB), size: 24),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Lokasi & Template Tarif',
+                                style: TextStyle(
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF1E3A8A),
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(Icons.stars_rounded, size: 16, color: Color(0xFF2563EB)),
+                            ],
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Atur tarif Mall PTC, Grand Indonesia, bandara, flat sekali bayar, dll.',
+                            style: TextStyle(fontSize: 11.5, color: Color(0xFF3B82F6)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Color(0xFF2563EB)),
+                  ],
+                ),
+              ),
+            ),
           ),
 
           const SizedBox(height: 12),

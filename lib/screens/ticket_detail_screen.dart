@@ -12,6 +12,7 @@ import '../services/ticket_share_service.dart';
 import '../widgets/edit_entry_time_sheet.dart';
 import '../widgets/edit_parking_location_sheet.dart';
 import '../widgets/parking_photo_viewer.dart';
+import '../services/notification_service.dart';
 import '../widgets/qr_display.dart';
 import 'scan_screen.dart';
 
@@ -29,6 +30,20 @@ class TicketDetailScreen extends StatefulWidget {
 
 class _TicketDetailScreenState extends State<TicketDetailScreen> {
   final GlobalKey _qrRepaintBoundaryKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationService.currentViewingTicketId = widget.ticket.id;
+  }
+
+  @override
+  void dispose() {
+    if (NotificationService.currentViewingTicketId == widget.ticket.id) {
+      NotificationService.currentViewingTicketId = null;
+    }
+    super.dispose();
+  }
 
   Future<void> _handleDone(BuildContext context) async {
     final provider = Provider.of<ParkingProvider>(context, listen: false);
@@ -590,6 +605,40 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                           value: costFormatted,
                           highlightColor: const Color(0xFF15803D),
                           isBold: true,
+                        ),
+                        // Rate rule breakdown info
+                        Builder(
+                          builder: (_) {
+                            final activeRule = provider.getRateRuleForTicket(currentTicket);
+                            return Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFBBF7D0)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF15803D)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      currentTicket.locationName != null && currentTicket.locationName!.isNotEmpty
+                                          ? 'Aturan ${currentTicket.locationName}: ${activeRule.summaryDescription}'
+                                          : 'Aturan Umum ${currentTicket.vehicleType}: ${activeRule.summaryDescription}',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF15803D),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                         if (isFirstLimitPassed) ...[
                           const Padding(
@@ -1849,16 +1898,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                 child: const Icon(Icons.chat_bubble_rounded, color: Color(0xFF2E7D32)),
               ),
               title: const Text('Kirim ke WhatsApp', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: const Text('Buka WhatsApp dengan pesan rincian karcis otomatis', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('Kirim foto QR/Barcode & rincian karcis ke WhatsApp', style: TextStyle(fontSize: 12)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               onTap: () async {
                 Navigator.of(ctx).pop();
-                final launched = await TicketShareService.shareToWhatsApp(currentTicket);
-                if (!launched && context.mounted) {
-                  String? imagePath = await TicketShareService.captureRepaintBoundary(_qrRepaintBoundaryKey);
-                  imagePath ??= await TicketShareService.generateTicketCodeImageFile(currentTicket);
-                  await TicketShareService.shareTicketViaSystem(ticket: currentTicket, qrImagePath: imagePath);
-                }
+                await TicketShareService.shareToWhatsApp(currentTicket);
               },
             ),
             const SizedBox(height: 8),
@@ -1874,16 +1918,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
                 child: const Icon(Icons.send_rounded, color: Color(0xFF0284C7)),
               ),
               title: const Text('Kirim ke Telegram', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              subtitle: const Text('Buka Telegram dengan pesan rincian karcis otomatis', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('Kirim foto QR/Barcode & rincian karcis ke Telegram', style: TextStyle(fontSize: 12)),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               onTap: () async {
                 Navigator.of(ctx).pop();
-                final launched = await TicketShareService.shareToTelegram(currentTicket);
-                if (!launched && context.mounted) {
-                  String? imagePath = await TicketShareService.captureRepaintBoundary(_qrRepaintBoundaryKey);
-                  imagePath ??= await TicketShareService.generateTicketCodeImageFile(currentTicket);
-                  await TicketShareService.shareTicketViaSystem(ticket: currentTicket, qrImagePath: imagePath);
-                }
+                await TicketShareService.shareToTelegram(currentTicket);
               },
             ),
             const SizedBox(height: 8),

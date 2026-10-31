@@ -4,15 +4,18 @@ import 'package:uuid/uuid.dart';
 import '../models/parking_ticket.dart';
 import '../models/parking_rate_rule.dart';
 import '../models/parking_history_record.dart';
+import '../models/parking_location.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
 import '../services/photo_service.dart';
 import '../services/settings_service.dart';
+import '../services/parking_location_service.dart';
 
 class ParkingProvider extends ChangeNotifier {
   final DatabaseService _db = DatabaseService.instance;
   final NotificationService _notifications = NotificationService();
   final SettingsService _settings;
+  final ParkingLocationService locationService;
 
   List<ParkingTicket> _tickets = [];
   List<ParkingTicket> _historyTickets = [];
@@ -22,7 +25,11 @@ class ParkingProvider extends ChangeNotifier {
   bool _isDisposed = false;
   int _operationToken = 0;
 
-  ParkingProvider(this._settings, {bool autoStartTicker = true}) {
+  ParkingProvider(
+    this._settings, {
+    ParkingLocationService? locationService,
+    bool autoStartTicker = true,
+  }) : locationService = locationService ?? ParkingLocationService(_settings.prefs) {
     if (autoStartTicker) {
       _startTicker();
     }
@@ -89,6 +96,7 @@ class ParkingProvider extends ChangeNotifier {
 
       if (_settings.notificationsEnabled) {
         for (final ticket in _tickets) {
+          await _notifications.showLiveTicketNotification(ticket);
           await _notifications.scheduleTicketReminders(ticket);
         }
       }
@@ -149,6 +157,7 @@ class ParkingProvider extends ChangeNotifier {
 
     if (_settings.notificationsEnabled) {
       await _notifications.requestPermissions();
+      await _notifications.showLiveTicketNotification(newTicket);
       await _notifications.scheduleTicketReminders(newTicket);
     }
 
@@ -159,6 +168,12 @@ class ParkingProvider extends ChangeNotifier {
 
   /// Rate calculation helpers
   ParkingRateRule getRateRuleForTicket(ParkingTicket ticket) {
+    if (ticket.locationName != null && ticket.locationName!.trim().isNotEmpty) {
+      final locRule = locationService.getRateRule(ticket.locationName, ticket.vehicleType);
+      if (locRule != null) {
+        return locRule;
+      }
+    }
     return _settings.getRateRule(ticket.vehicleType);
   }
 
@@ -168,12 +183,33 @@ class ParkingProvider extends ChangeNotifier {
     return getRateRuleForTicket(ticket).calculateCost(dur);
   }
 
-  int calculateCost(String vehicleType, Duration duration) {
+  int calculateCost(String vehicleType, Duration duration, {String? locationName}) {
+    if (locationName != null && locationName.trim().isNotEmpty) {
+      final locRule = locationService.getRateRule(locationName, vehicleType);
+      if (locRule != null) {
+        return locRule.calculateCost(duration);
+      }
+    }
     return _settings.getRateRule(vehicleType).calculateCost(duration);
   }
 
   Future<void> updateRateRule(String vehicleType, ParkingRateRule rule) async {
     await _settings.setRateRule(vehicleType, rule);
+    notifyListeners();
+  }
+
+  Future<void> saveParkingLocation(ParkingLocation location) async {
+    await locationService.saveLocation(location);
+    notifyListeners();
+  }
+
+  Future<void> deleteParkingLocation(String id) async {
+    await locationService.deleteLocation(id);
+    notifyListeners();
+  }
+
+  Future<void> resetParkingLocationsToDefault() async {
+    await locationService.resetToDefaults();
     notifyListeners();
   }
 
@@ -285,6 +321,7 @@ class ParkingProvider extends ChangeNotifier {
       }
 
       if (_settings.notificationsEnabled) {
+        await _notifications.showLiveTicketNotification(restoredTicket);
         await _notifications.scheduleTicketReminders(restoredTicket);
       }
       notifyListeners();
@@ -370,9 +407,11 @@ class ParkingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Update vehicle parking location details (floor, block/pillar, photo, GPS coordinates)
+  /// Update vehicle parking location details (floor, block/pillar, photo, GPS coordinates, location name)
   Future<void> updateParkingLocation(
     String ticketId, {
+    String? locationName,
+    bool clearLocationName = false,
     String? parkingFloor,
     bool clearParkingFloor = false,
     String? parkingBlock,
@@ -402,6 +441,8 @@ class ParkingProvider extends ChangeNotifier {
     }
 
     final updatedTicket = oldTicket.copyWith(
+      locationName: locationName,
+      clearLocationName: clearLocationName,
       parkingFloor: parkingFloor,
       clearParkingFloor: clearParkingFloor,
       parkingBlock: parkingBlock,
@@ -416,6 +457,9 @@ class ParkingProvider extends ChangeNotifier {
     await _db.updateTicket(updatedTicket);
     if (activeIndex != -1) {
       _tickets[activeIndex] = updatedTicket;
+      if (_settings.notificationsEnabled) {
+        await _notifications.showLiveTicketNotification(updatedTicket);
+      }
     }
     if (historyIndex != -1) {
       _historyTickets[historyIndex] = updatedTicket;
@@ -455,6 +499,9 @@ class ParkingProvider extends ChangeNotifier {
     await _db.updateTicket(updatedTicket);
     if (activeIndex != -1) {
       _tickets[activeIndex] = updatedTicket;
+      if (_settings.notificationsEnabled) {
+        await _notifications.showLiveTicketNotification(updatedTicket);
+      }
     }
     if (historyIndex != -1) {
       _historyTickets[historyIndex] = updatedTicket;
@@ -494,6 +541,7 @@ class ParkingProvider extends ChangeNotifier {
       );
       await _db.updateTicket(updated);
       if (notificationsEnabled) {
+        await _notifications.showLiveTicketNotification(updated);
         await _notifications.scheduleTicketReminders(updated);
       }
       updatedTickets.add(updated);
@@ -536,6 +584,7 @@ class ParkingProvider extends ChangeNotifier {
     await _db.updateTicket(updatedTicket);
 
     if (_settings.notificationsEnabled) {
+      await _notifications.showLiveTicketNotification(updatedTicket);
       await _notifications.scheduleTicketReminders(updatedTicket);
     }
 
@@ -557,6 +606,7 @@ class ParkingProvider extends ChangeNotifier {
     await _db.updateTicket(updatedTicket);
 
     if (_settings.notificationsEnabled) {
+      await _notifications.showLiveTicketNotification(updatedTicket);
       await _notifications.scheduleTicketReminders(updatedTicket);
     }
 

@@ -6,6 +6,7 @@ import '../models/parking_history_record.dart';
 import '../models/parking_rate_rule.dart';
 import '../providers/parking_provider.dart';
 import '../services/export_service.dart';
+import 'location_templates_screen.dart';
 
 class ExpenseDashboardScreen extends StatefulWidget {
   const ExpenseDashboardScreen({super.key});
@@ -491,6 +492,17 @@ class _ExpenseDashboardScreenState extends State<ExpenseDashboardScreen> {
                     }
                   },
                   child: const Text('Simpan Aturan Tarif', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.location_on_outlined, size: 16),
+                  label: const Text('Atur Tarif Khusus per Lokasi (Mall PTC, dll)'),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LocationTemplatesScreen()),
+                    );
+                  },
                 ),
               ],
             ),

@@ -198,6 +198,7 @@ class TicketShareService {
         data: data,
         version: QrVersions.auto,
         gapless: true,
+        emptyColor: const Color(0xFFFFFFFF),
         errorCorrectionLevel: QrErrorCorrectLevel.H,
         eyeStyle: const QrEyeStyle(
           eyeShape: QrEyeShape.square,
@@ -293,48 +294,94 @@ class TicketShareService {
     }
   }
 
-  /// Launch WhatsApp with pre-filled ticket details
+  static const MethodChannel _nativeShareChannel = MethodChannel('com.karcisparkir.karcis_parkir/share');
+
+  /// Direct share helper with fallback to system share and deep links
+  static Future<bool> shareDirectToApp({
+    required List<String> packages,
+    required ParkingTicket ticket,
+    String? qrImagePath,
+    required Uri deepLinkFallback,
+    required Uri webFallback,
+  }) async {
+    final message = buildShareMessage(ticket);
+
+    // Allow mock testing in widget and unit tests without requiring file system / plugins
+    if (mockLaunchUrlHandler != null) {
+      return await mockLaunchUrlHandler!(deepLinkFallback);
+    }
+
+    // 1. Ensure QR/Barcode image is generated
+    String? imagePath = qrImagePath;
+    if (imagePath == null || !await File(imagePath).exists()) {
+      imagePath = await generateTicketCodeImageFile(ticket);
+    }
+
+    final List<String> filePaths = [];
+
+    // Try native targeted intent when running on Android
+    if (Platform.isAndroid && packages.isNotEmpty && filePaths.isNotEmpty) {
+      try {
+        final bool? directSuccess = await _nativeShareChannel.invokeMethod<bool>('shareDirect', {
+          'packages': packages,
+          'filePaths': filePaths,
+          'text': message,
+        });
+        if (directSuccess == true) {
+          return true;
+        }
+      } catch (e) {
+        debugPrint('Direct share intent notice: $e, continuing with fallbacks');
+      }
+    }
+
+    // Fallback: Use system share sheet which attaches the high-res images
+    try {
+      await shareTicketViaSystem(ticket: ticket, qrImagePath: imagePath);
+      return true;
+    } catch (_) {}
+
+    // Last resort fallback: URL scheme deep link
+    try {
+      if (await canLaunchUrl(deepLinkFallback)) {
+        return await launchUrl(deepLinkFallback, mode: LaunchMode.externalApplication);
+      } else if (await canLaunchUrl(webFallback)) {
+        return await launchUrl(webFallback, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Error launching deep link fallback: $e');
+    }
+    return false;
+  }
+
+  /// Launch WhatsApp with pre-filled ticket details and QR/Barcode photo attached
   static Future<bool> shareToWhatsApp(ParkingTicket ticket, {String? qrImagePath}) async {
     final message = buildShareMessage(ticket);
     final deepLink = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(message)}');
     final webFallback = Uri.parse('https://api.whatsapp.com/send?text=${Uri.encodeComponent(message)}');
 
-    if (mockLaunchUrlHandler != null) {
-      return await mockLaunchUrlHandler!(deepLink);
-    }
-
-    try {
-      if (await canLaunchUrl(deepLink)) {
-        return await launchUrl(deepLink, mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(webFallback)) {
-        return await launchUrl(webFallback, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      debugPrint('Error launching WhatsApp: $e');
-    }
-    return false;
+    return await shareDirectToApp(
+      packages: const ['com.whatsapp', 'com.whatsapp.w4b'],
+      ticket: ticket,
+      qrImagePath: qrImagePath,
+      deepLinkFallback: deepLink,
+      webFallback: webFallback,
+    );
   }
 
-  /// Launch Telegram with pre-filled ticket details
+  /// Launch Telegram with pre-filled ticket details and QR/Barcode photo attached
   static Future<bool> shareToTelegram(ParkingTicket ticket, {String? qrImagePath}) async {
     final message = buildShareMessage(ticket);
     final deepLink = Uri.parse('tg://msg?text=${Uri.encodeComponent(message)}');
     final webFallback = Uri.parse('https://t.me/share/url?url=&text=${Uri.encodeComponent(message)}');
 
-    if (mockLaunchUrlHandler != null) {
-      return await mockLaunchUrlHandler!(deepLink);
-    }
-
-    try {
-      if (await canLaunchUrl(deepLink)) {
-        return await launchUrl(deepLink, mode: LaunchMode.externalApplication);
-      } else if (await canLaunchUrl(webFallback)) {
-        return await launchUrl(webFallback, mode: LaunchMode.externalApplication);
-      }
-    } catch (e) {
-      debugPrint('Error launching Telegram: $e');
-    }
-    return false;
+    return await shareDirectToApp(
+      packages: const ['org.telegram.messenger', 'org.telegram.messenger.web'],
+      ticket: ticket,
+      qrImagePath: qrImagePath,
+      deepLinkFallback: deepLink,
+      webFallback: webFallback,
+    );
   }
 
   /// Copy structured ticket details to clipboard

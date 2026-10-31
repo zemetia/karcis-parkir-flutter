@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/parking_provider.dart';
 import '../services/location_service.dart';
 import '../services/photo_service.dart';
+import '../widgets/location_picker_sheet.dart';
 
 enum ScanMode {
   all,
@@ -365,17 +366,156 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                   ),
                   const SizedBox(height: 12),
 
-                  // Lokasi Parkir
-                  TextField(
-                    controller: locationController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      labelText: 'Lokasi / Nama Gedung (Opsional)',
-                      hintText: 'Mall Grand Indonesia',
-                      prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
+                  // Lokasi Parkir & Template
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: locationController,
+                        textCapitalization: TextCapitalization.words,
+                        onChanged: (_) => setSheetState(() {}),
+                        decoration: InputDecoration(
+                          labelText: 'Lokasi / Nama Gedung (Opsional)',
+                          hintText: 'Mall PTC, Grand Indonesia, dll',
+                          prefixIcon: const Icon(Icons.location_on_outlined, size: 20),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.bookmark_border_rounded, color: Color(0xFF2563EB)),
+                            tooltip: 'Pilih dari Template Lokasi',
+                            onPressed: () async {
+                              final picked = await LocationPickerSheet.show(
+                                sheetContext,
+                                currentLocation: locationController.text.trim(),
+                                vehicleType: selectedVehicle,
+                              );
+                              if (picked != null) {
+                                setSheetState(() {
+                                  locationController.text = picked.name;
+                                });
+                              }
+                            },
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Quick Template Chips
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ...['Mall PTC (Pakuwon)', 'Grand Indonesia', 'Stasiun Kereta / KRL', 'Pasar & Wisata (Sekali Bayar)']
+                                .map((templateName) {
+                              final isSelected = locationController.text.trim().toLowerCase() ==
+                                  templateName.toLowerCase();
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: ActionChip(
+                                  label: Text(
+                                    templateName.contains('PTC')
+                                        ? 'Mall PTC'
+                                        : (templateName.contains('Stasiun')
+                                            ? 'Stasiun KRL'
+                                            : (templateName.contains('Pasar')
+                                                ? 'Pasar Flat'
+                                                : templateName)),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                      color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF475569),
+                                    ),
+                                  ),
+                                  backgroundColor: isSelected ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9),
+                                  side: BorderSide(
+                                    color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
+                                  ),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  onPressed: () {
+                                    setSheetState(() {
+                                      locationController.text = templateName;
+                                    });
+                                  },
+                                ),
+                              );
+                            }),
+                            ActionChip(
+                              avatar: const Icon(Icons.tune_rounded, size: 13, color: Color(0xFF2563EB)),
+                              label: const Text(
+                                'Template Lain...',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              ),
+                              backgroundColor: const Color(0xFFEFF6FF),
+                              side: const BorderSide(color: Color(0xFFBFDBFE)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              onPressed: () async {
+                                final picked = await LocationPickerSheet.show(
+                                  sheetContext,
+                                  currentLocation: locationController.text.trim(),
+                                  vehicleType: selectedVehicle,
+                                );
+                                if (picked != null) {
+                                  setSheetState(() {
+                                    locationController.text = picked.name;
+                                  });
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Matched Location Tariff Info Banner
+                      Builder(
+                        builder: (_) {
+                          final parkingProvider =
+                              Provider.of<ParkingProvider>(sheetContext, listen: false);
+                          final matchedLoc = parkingProvider.locationService
+                              .findLocationByName(locationController.text);
+
+                          if (matchedLoc != null) {
+                            final rule = matchedLoc.getRateFor(selectedVehicle);
+                            return Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.verified_rounded, size: 15, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: RichText(
+                                      text: TextSpan(
+                                        style: const TextStyle(fontSize: 11, color: Color(0xFF1E40AF)),
+                                        children: [
+                                          TextSpan(
+                                            text: 'Tarif ${matchedLoc.name} ($selectedVehicle): ',
+                                            style: const TextStyle(fontWeight: FontWeight.w700),
+                                          ),
+                                          TextSpan(
+                                            text: rule.summaryDescription,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
