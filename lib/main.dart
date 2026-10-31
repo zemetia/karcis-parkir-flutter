@@ -16,7 +16,6 @@ void main() async {
   // Initialize notifications
   final notificationService = NotificationService();
   await notificationService.init();
-  await notificationService.requestPermissions();
 
   // Initialize database
   await DatabaseService.instance.database;

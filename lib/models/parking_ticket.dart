@@ -14,6 +14,12 @@ class ParkingTicket {
   final double secondReminderHours; // Default 24 (24 jam)
   final List<double> reminderHours; // Dynamic list of reminder hours
   final bool isCompleted;
+  final String? parkingFloor;
+  final String? parkingBlock;
+  final String? parkingPhotoPath;
+  final String? ticketPhotoPath; // Foto fisik lembar karcis kertas (pencegahan denda tiket hilang)
+  final double? latitude;
+  final double? longitude;
 
   ParkingTicket({
     required this.id,
@@ -29,6 +35,12 @@ class ParkingTicket {
     double? secondReminderHours,
     List<double>? reminderHours,
     this.isCompleted = false,
+    this.parkingFloor,
+    this.parkingBlock,
+    this.parkingPhotoPath,
+    this.ticketPhotoPath,
+    this.latitude,
+    this.longitude,
   })  : createdAt = createdAt ?? DateTime.now(),
         reminderHours = _normalizeReminderHours(
           reminderHours,
@@ -75,6 +87,51 @@ class ParkingTicket {
     }
   }
 
+  bool get hasVehicleLocation =>
+      (parkingFloor != null && parkingFloor!.trim().isNotEmpty) ||
+      (parkingBlock != null && parkingBlock!.trim().isNotEmpty) ||
+      (parkingPhotoPath != null && parkingPhotoPath!.trim().isNotEmpty) ||
+      (latitude != null && longitude != null);
+
+  bool get hasTicketPhoto =>
+      ticketPhotoPath != null && ticketPhotoPath!.trim().isNotEmpty;
+
+  static String _formatFloorName(String floor) {
+    final lower = floor.toLowerCase();
+    if (lower.startsWith('lt') ||
+        lower.startsWith('lantai') ||
+        lower == 'rooftop' ||
+        lower == 'ground' ||
+        lower == 'gf') {
+      return floor;
+    }
+    return 'Lantai $floor';
+  }
+
+  String? get parkingLocationSummary {
+    final floor = parkingFloor?.trim();
+    final block = parkingBlock?.trim();
+    if (floor != null && floor.isNotEmpty && block != null && block.isNotEmpty) {
+      return '${_formatFloorName(floor)} • $block';
+    } else if (floor != null && floor.isNotEmpty) {
+      return _formatFloorName(floor);
+    } else if (block != null && block.isNotEmpty) {
+      return block;
+    } else if (latitude != null && longitude != null) {
+      return 'Titik GPS';
+    } else if (parkingPhotoPath != null && parkingPhotoPath!.trim().isNotEmpty) {
+      return 'Foto Tiang Parkir';
+    }
+    return null;
+  }
+
+  String? get googleMapsUrl {
+    if (latitude != null && longitude != null) {
+      return 'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude';
+    }
+    return null;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -90,6 +147,12 @@ class ParkingTicket {
       'secondReminderHours': reminderHours.length > 1 ? reminderHours[1] : secondReminderHours,
       'reminderHours': reminderHours.join(','),
       'isCompleted': isCompleted ? 1 : 0,
+      'parkingFloor': parkingFloor,
+      'parkingBlock': parkingBlock,
+      'parkingPhotoPath': parkingPhotoPath,
+      'ticketPhotoPath': ticketPhotoPath,
+      'latitude': latitude,
+      'longitude': longitude,
     };
   }
 
@@ -123,6 +186,12 @@ class ParkingTicket {
       secondReminderHours: second,
       reminderHours: parsedHours,
       isCompleted: (map['isCompleted'] as int? ?? 0) == 1,
+      parkingFloor: map['parkingFloor'] as String?,
+      parkingBlock: map['parkingBlock'] as String?,
+      parkingPhotoPath: map['parkingPhotoPath'] as String?,
+      ticketPhotoPath: map['ticketPhotoPath'] as String?,
+      latitude: (map['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -145,6 +214,17 @@ class ParkingTicket {
     double? secondReminderHours,
     List<double>? reminderHours,
     bool? isCompleted,
+    String? parkingFloor,
+    bool clearParkingFloor = false,
+    String? parkingBlock,
+    bool clearParkingBlock = false,
+    String? parkingPhotoPath,
+    bool clearParkingPhoto = false,
+    String? ticketPhotoPath,
+    bool clearTicketPhoto = false,
+    double? latitude,
+    double? longitude,
+    bool clearCoordinates = false,
   }) {
     return ParkingTicket(
       id: id ?? this.id,
@@ -160,6 +240,12 @@ class ParkingTicket {
       secondReminderHours: secondReminderHours ?? this.secondReminderHours,
       reminderHours: reminderHours ?? this.reminderHours,
       isCompleted: isCompleted ?? this.isCompleted,
+      parkingFloor: clearParkingFloor ? null : (parkingFloor ?? this.parkingFloor),
+      parkingBlock: clearParkingBlock ? null : (parkingBlock ?? this.parkingBlock),
+      parkingPhotoPath: clearParkingPhoto ? null : (parkingPhotoPath ?? this.parkingPhotoPath),
+      ticketPhotoPath: clearTicketPhoto ? null : (ticketPhotoPath ?? this.ticketPhotoPath),
+      latitude: clearCoordinates ? null : (latitude ?? this.latitude),
+      longitude: clearCoordinates ? null : (longitude ?? this.longitude),
     );
   }
 }

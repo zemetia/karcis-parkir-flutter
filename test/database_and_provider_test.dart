@@ -50,7 +50,7 @@ void main() {
       provider.dispose();
     });
 
-    test('completeTicket deletes ticket permanently from local db', () async {
+    test('completeTicket marks ticket as completed and archives it, restoreTicket restores it, deleteTicketPermanently removes it', () async {
       SharedPreferences.setMockInitialValues({});
       final settings = await SettingsService.init();
       final provider = ParkingProvider(settings, autoStartTicker: false);
@@ -62,15 +62,33 @@ void main() {
 
       expect(provider.tickets.length, 1);
 
-      // Flow requirement: "kalau done di klik maka hapus aja dari database local"
+      // Flow requirement: Karics diselesaikan masuk ke riwayat/arsip (isCompleted: true)
       await provider.completeTicket(ticket.id);
 
-      // Verify removed from memory
+      // Verify removed from active tickets and moved to historyTickets
       expect(provider.tickets, isEmpty);
+      expect(provider.historyTickets.length, 1);
+      expect(provider.historyTickets.first.isCompleted, isTrue);
 
-      // Verify removed from SQLite database
-      final deletedTicket = await DatabaseService.instance.getTicketById(ticket.id);
-      expect(deletedTicket, isNull);
+      // Verify in SQLite database as completed
+      final archivedTicket = await DatabaseService.instance.getTicketById(ticket.id);
+      expect(archivedTicket, isNotNull);
+      expect(archivedTicket!.isCompleted, isTrue);
+
+      // Test restoreTicket: restores back to active tickets
+      await provider.restoreTicket(ticket.id);
+      expect(provider.tickets.length, 1);
+      expect(provider.historyTickets, isEmpty);
+      final restoredTicket = await DatabaseService.instance.getTicketById(ticket.id);
+      expect(restoredTicket!.isCompleted, isFalse);
+
+      // Test deleteTicketPermanently: permanently removes from SQLite database
+      await provider.completeTicket(ticket.id);
+      expect(provider.historyTickets.length, 1);
+      await provider.deleteTicketPermanently(ticket.id);
+      expect(provider.historyTickets, isEmpty);
+      final permanentlyDeleted = await DatabaseService.instance.getTicketById(ticket.id);
+      expect(permanentlyDeleted, isNull);
 
       provider.dispose();
     });

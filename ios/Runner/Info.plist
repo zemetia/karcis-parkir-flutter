@@ -5,7 +5,19 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Aplikasi membutuhkan kamera untuk memindai karcis parkir.</string>
+	<string>Aplikasi membutuhkan kamera untuk memindai karcis parkir dan memfoto tiang lokasi parkir.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aplikasi membutuhkan akses galeri untuk memilih foto tiang lokasi parkir.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Aplikasi membutuhkan lokasi GPS untuk menyimpan titik parkir kendaraan Anda.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>geo</string>
+		<string>comgooglemaps</string>
+		<string>whatsapp</string>
+		<string>tg</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

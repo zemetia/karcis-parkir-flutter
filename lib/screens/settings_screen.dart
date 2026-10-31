@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../models/parking_rate_rule.dart';
 import '../providers/parking_provider.dart';
 import '../services/notification_service.dart';
+import 'expense_dashboard_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -287,7 +290,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                   ),
                   value: _notificationsEnabled,
-                  onChanged: (val) {
+                  onChanged: (val) async {
+                    if (val) {
+                      await NotificationService().requestPermissions();
+                    }
                     setState(() {
                       _notificationsEnabled = val;
                     });
@@ -461,6 +467,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 20),
 
+          // Rate Rules Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Aturan Tarif Parkir',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.2,
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF2563EB),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
+                onPressed: () => _showEditRateDialog(context),
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                label: const Text(
+                  'Ubah Tarif',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Consumer<ParkingProvider>(
+            builder: (context, provider, _) {
+              final mobilRule = provider.settings.getRateRule('Mobil');
+              final motorRule = provider.settings.getRateRule('Motor');
+
+              return Column(
+                children: [
+                  _buildRateRuleCard(
+                    vehicleType: 'Mobil',
+                    icon: Icons.directions_car_rounded,
+                    rule: mobilRule,
+                    onTap: () => _showEditRateDialog(context, initialVehicle: 'Mobil'),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildRateRuleCard(
+                    vehicleType: 'Motor',
+                    icon: Icons.two_wheeler_rounded,
+                    rule: motorRule,
+                    onTap: () => _showEditRateDialog(context, initialVehicle: 'Motor'),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 12),
+
+          // Shortcut to Expense Dashboard
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+            ),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ExpenseDashboardScreen()),
+              );
+            },
+            icon: const Icon(Icons.receipt_long_rounded, size: 20, color: Color(0xFF2563EB)),
+            label: const Text(
+              'Buka Rekap Pengeluaran & Reimbursement',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF2563EB)),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
           // Test Notification button
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
@@ -469,6 +552,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.5),
             ),
             onPressed: () async {
+              await NotificationService().requestPermissions();
               await NotificationService().showInstantNotification(
                 title: '🔔 Uji Coba Pengingat Parkir',
                 body: 'Sistem notifikasi karcis parkir berfungsi normal.',
@@ -489,6 +573,315 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRateRuleCard({
+    required String vehicleType,
+    required IconData icon,
+    required ParkingRateRule rule,
+    required VoidCallback onTap,
+  }) {
+    final maxStr = rule.dailyMaxRate > 0
+        ? 'Maks. Rp ${rule.dailyMaxRate ~/ 1000}rb/hari'
+        : 'Tanpa batas harian';
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: const Color(0xFF2563EB), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tarif $vehicleType',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '1 jam Rp ${rule.firstHourRate ~/ 1000}rb • Selanjutnya Rp ${rule.hourlyRate ~/ 1000}rb/jam • $maxStr',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditRateDialog(BuildContext context, {String initialVehicle = 'Mobil'}) {
+    final provider = Provider.of<ParkingProvider>(context, listen: false);
+    String selectedVehicle = initialVehicle;
+    final currentRule = provider.settings.getRateRule(selectedVehicle);
+
+    final firstHourController =
+        TextEditingController(text: currentRule.firstHourRate.toString());
+    final hourlyController =
+        TextEditingController(text: currentRule.hourlyRate.toString());
+    final dailyMaxController =
+        TextEditingController(text: currentRule.dailyMaxRate.toString());
+    final graceController =
+        TextEditingController(text: currentRule.gracePeriodMinutes.toString());
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Icon(Icons.calculate_rounded, color: Color(0xFF2563EB), size: 22),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Aturan Tarif Parkir',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF0F172A)),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20, color: Color(0xFF64748B)),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Masukkan aturan tarif (contoh: 1 jam pertama Rp 4.000, tiap jam berikutnya Rp 3.000, maksimal harian Rp 40.000).',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: ['Mobil', 'Motor', 'Truk', 'Lainnya'].map((v) {
+                    final isSel = selectedVehicle == v;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: InkWell(
+                          onTap: () {
+                            setModalState(() {
+                              selectedVehicle = v;
+                              final rule = provider.settings.getRateRule(v);
+                              firstHourController.text = rule.firstHourRate.toString();
+                              hourlyController.text = rule.hourlyRate.toString();
+                              dailyMaxController.text = rule.dailyMaxRate.toString();
+                              graceController.text = rule.gracePeriodMinutes.toString();
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSel ? const Color(0xFF2563EB) : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              v,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isSel ? Colors.white : const Color(0xFF475569),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: firstHourController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setModalState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Tarif 1 Jam Pertama (Rp)',
+                    hintText: 'Contoh: 4000',
+                    prefixIcon: const Icon(Icons.looks_one_rounded, size: 18),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: hourlyController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setModalState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Tarif Tiap Jam Berikutnya (Rp)',
+                    hintText: 'Contoh: 3000',
+                    prefixIcon: const Icon(Icons.update_rounded, size: 18),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: dailyMaxController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setModalState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Maksimal Harian (Rp, 0 jika tanpa batas)',
+                    hintText: 'Contoh: 40000',
+                    prefixIcon: const Icon(Icons.vertical_align_top_rounded, size: 18),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: graceController,
+                  keyboardType: TextInputType.number,
+                  onChanged: (_) => setModalState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Bebas Biaya Masuk / Grace Period (Menit)',
+                    hintText: 'Contoh: 0 atau 15',
+                    prefixIcon: const Icon(Icons.hourglass_empty_rounded, size: 18),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Builder(
+                  builder: (_) {
+                    final f = int.tryParse(firstHourController.text.trim()) ?? 4000;
+                    final h = int.tryParse(hourlyController.text.trim()) ?? 3000;
+                    final d = int.tryParse(dailyMaxController.text.trim()) ?? 40000;
+                    final g = int.tryParse(graceController.text.trim()) ?? 0;
+                    final previewRule = ParkingRateRule(
+                      firstHourRate: f,
+                      hourlyRate: h,
+                      dailyMaxRate: d,
+                      gracePeriodMinutes: g,
+                    );
+                    final simCost = previewRule.calculateCost(const Duration(hours: 2, minutes: 15));
+                    final simCostStr = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(simCost);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFBBF7D0)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calculate_rounded, size: 18, color: Color(0xFF15803D)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Simulasi: Durasi: 2 jam 15 mnt • Estimasi: $simCostStr',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF15803D),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () async {
+                    final first = int.tryParse(firstHourController.text.trim()) ?? 4000;
+                    final hourly = int.tryParse(hourlyController.text.trim()) ?? 3000;
+                    final daily = int.tryParse(dailyMaxController.text.trim()) ?? 40000;
+                    final grace = int.tryParse(graceController.text.trim()) ?? 0;
+
+                    final updatedRule = ParkingRateRule(
+                      firstHourRate: first,
+                      hourlyRate: hourly,
+                      dailyMaxRate: daily,
+                      gracePeriodMinutes: grace,
+                    );
+
+                    await provider.updateRateRule(selectedVehicle, updatedRule);
+                    if (context.mounted) {
+                      Navigator.of(ctx).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Aturan tarif $selectedVehicle berhasil disimpan.'),
+                          backgroundColor: const Color(0xFF059669),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text('Simpan Aturan Tarif', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

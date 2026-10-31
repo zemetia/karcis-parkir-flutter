@@ -1,12 +1,13 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/parking_rate_rule.dart';
 
 class SettingsService {
   static const String keyFirstReminderHours = 'first_reminder_hours';
   static const String keySecondReminderHours = 'second_reminder_hours';
   static const String keyNotificationsEnabled = 'notifications_enabled';
   static const String keyVibrationEnabled = 'vibration_enabled';
-
   static const String keyReminderHoursList = 'reminder_hours_list';
+  static const String keyRateRulePrefix = 'rate_rule_';
 
   final SharedPreferences _prefs;
 
@@ -94,4 +95,21 @@ class SettingsService {
 
   Future<bool> setVibrationEnabled(bool enabled) =>
       _prefs.setBool(keyVibrationEnabled, enabled);
+
+  // Rate rule settings per vehicle type (e.g. Mobil, Motor, Truk, Lainnya)
+  ParkingRateRule getRateRule(String vehicleType) {
+    final key = '$keyRateRulePrefix${vehicleType.toLowerCase()}';
+    final jsonStr = _prefs.getString(key);
+    if (jsonStr != null && jsonStr.isNotEmpty) {
+      try {
+        return ParkingRateRule.fromJson(jsonStr);
+      } catch (_) {}
+    }
+    return ParkingRateRule.defaultFor(vehicleType);
+  }
+
+  Future<bool> setRateRule(String vehicleType, ParkingRateRule rule) {
+    final key = '$keyRateRulePrefix${vehicleType.toLowerCase()}';
+    return _prefs.setString(key, rule.toJson());
+  }
 }

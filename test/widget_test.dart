@@ -3,12 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karcis_parkir/models/parking_ticket.dart';
 import 'package:karcis_parkir/providers/parking_provider.dart';
 import 'package:karcis_parkir/screens/home_screen.dart';
+import 'package:karcis_parkir/screens/scan_screen.dart';
 import 'package:karcis_parkir/screens/settings_screen.dart';
 import 'package:karcis_parkir/screens/ticket_detail_screen.dart';
 import 'package:karcis_parkir/services/database_service.dart';
 import 'package:karcis_parkir/services/settings_service.dart';
 import 'package:karcis_parkir/widgets/qr_display.dart';
 import 'package:karcis_parkir/widgets/ticket_card.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -98,22 +100,22 @@ void main() {
     expect(find.text('Selesaikan Parkir?'), findsOneWidget);
     expect(find.text('Ya, Selesai (Done)'), findsOneWidget);
 
-    // Confirm done inside runAsync for DB deletion
+    // Confirm done inside runAsync for DB update
     await tester.tap(find.text('Ya, Selesai (Done)'));
     await tester.runAsync(() async {
-      await tester.pump();
-      // give microtasks time to complete provider.completeTicket & DB delete
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 600));
     });
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    // Ticket must now be removed from provider and local DB
+    // Ticket must now be removed from active provider tickets and marked as completed
     expect(provider.tickets, isEmpty);
+    expect(provider.historyTickets.length, 1);
     ParkingTicket? inDb;
     await tester.runAsync(() async {
       inDb = await DatabaseService.instance.getTicketById(ticket.id);
     });
-    expect(inDb, isNull);
+    expect(inDb, isNotNull);
+    expect(inDb!.isCompleted, isTrue);
 
     provider.dispose();
   });
@@ -294,6 +296,279 @@ void main() {
     // Verify updated entry time in provider
     expect(provider.tickets.first.entryTime.hour, 10);
     expect(provider.tickets.first.entryTime.minute, 58);
+
+    provider.dispose();
+  });
+
+  test('Barcode and QR helper methods identify formats correctly', () {
+    expect(ScanScreen.isBarcodeFormat('code128'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('CODE_128'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('code39'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('ean13'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('ean8'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('upca'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('upce'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('codabar'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('itf'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('itf14'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('itf2of5'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('pdf417'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('databar'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('databarExpanded'), isTrue);
+    expect(ScanScreen.isBarcodeFormat('databarLimited'), isTrue);
+
+    // 2D matrix formats and specials must not be classified as 1D barcode
+    expect(ScanScreen.isBarcodeFormat('qrCode'), isFalse);
+    expect(ScanScreen.isBarcodeFormat('microQrCode'), isFalse);
+    expect(ScanScreen.isBarcodeFormat('dataMatrix'), isFalse);
+    expect(ScanScreen.isBarcodeFormat('aztec'), isFalse);
+    expect(ScanScreen.isBarcodeFormat('maxiCode'), isFalse);
+    expect(ScanScreen.isBarcodeFormat('manual'), isFalse);
+    expect(ScanScreen.isBarcodeFormat('unknown'), isFalse);
+
+    expect(ScanScreen.formatDisplayName('code128'), 'Barcode (Code 128)');
+    expect(ScanScreen.formatDisplayName('code39'), 'Barcode (Code 39)');
+    expect(ScanScreen.formatDisplayName('ean13'), 'Barcode (EAN-13)');
+    expect(ScanScreen.formatDisplayName('qrCode'), 'QR Code');
+    expect(ScanScreen.formatDisplayName('microQrCode'), 'QR Code (Micro QR)');
+    expect(ScanScreen.formatDisplayName('dataMatrix'), 'Data Matrix');
+    expect(ScanScreen.formatDisplayName('aztec'), 'Aztec Code');
+    expect(ScanScreen.formatDisplayName('maxiCode'), 'MaxiCode');
+    expect(ScanScreen.formatDisplayName('databar'), 'Barcode (GS1 DataBar)');
+    expect(ScanScreen.formatDisplayName('manual'), 'Input Manual');
+  });
+
+  testWidgets('TicketDetailScreen displays barcode format information when ticket format is barcode', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await SettingsService.init();
+    final provider = ParkingProvider(settings, autoStartTicker: false);
+
+    late ParkingTicket ticket;
+    await tester.runAsync(() async {
+      ticket = await provider.addTicket(
+        rawCode: 'BARCODE-998877',
+        format: 'code128',
+        plateNumber: 'B 8888 XYZ',
+        vehicleType: 'Mobil',
+        locationName: 'Secure Parking Mall',
+      );
+    });
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: MaterialApp(
+          home: TicketDetailScreen(ticket: ticket),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Format Karcis'), findsOneWidget);
+    expect(find.text('Barcode (Code 128)'), findsOneWidget);
+    expect(find.text('Format Asli: Barcode (Code 128)'), findsOneWidget);
+
+    provider.dispose();
+  });
+
+  testWidgets('ScanScreen renders mode switcher, toggles barcode mode, and opens barcode manual input', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await SettingsService.init();
+    final provider = ParkingProvider(settings, autoStartTicker: false);
+    await tester.runAsync(() async {
+      await provider.loadTickets();
+    });
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: const MaterialApp(
+          home: ScanScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Verify AppBar & Mode Switcher elements
+    expect(find.text('Pindai Karcis Baru'), findsOneWidget);
+    expect(find.text('Semua'), findsOneWidget);
+    expect(find.text('Barcode'), findsOneWidget);
+    expect(find.text('QR Code'), findsOneWidget);
+    expect(find.text('Arahkan kamera ke barcode atau QR code karcis'), findsOneWidget);
+
+    // Tap Barcode mode
+    await tester.tap(find.text('Barcode'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Posisikan garis barcode secara horizontal di dalam kotak'), findsOneWidget);
+
+    // Tap QR Code mode
+    await tester.tap(find.text('QR Code'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Posisikan QR code di dalam kotak pemindai'), findsOneWidget);
+
+    // Test Zoom toggle
+    expect(find.text('1x'), findsOneWidget);
+    await tester.tap(find.text('1x'));
+    await tester.pump();
+    expect(find.text('2x'), findsOneWidget);
+
+    // Tap Input Kode Manual
+    await tester.tap(find.text('Input Kode Manual'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Verify manual input dialog supports barcodes
+    expect(find.text('Input Kode Karcis Manual'), findsOneWidget);
+    expect(find.text('Nomor / Barcode Karcis'), findsOneWidget);
+    expect(find.text('Mendukung nomor karcis, QR code, atau barcode.'), findsOneWidget);
+
+    provider.dispose();
+  });
+
+  testWidgets('ScanScreen onDetect filters formats according to selected mode and saves barcode ticket', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await SettingsService.init();
+    final provider = ParkingProvider(settings, autoStartTicker: false);
+    await tester.runAsync(() async {
+      await provider.loadTickets();
+    });
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: const MaterialApp(
+          home: ScanScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Switch to Barcode mode
+    await tester.tap(find.text('Barcode'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final scannerFinder = find.byType(MobileScanner);
+    expect(scannerFinder, findsOneWidget);
+    final mobileScanner = tester.widget<MobileScanner>(scannerFinder);
+
+    // Simulate detection of a QR Code while in Barcode mode -> Must be ignored!
+    mobileScanner.onDetect!(
+      const BarcodeCapture(
+        barcodes: [
+          Barcode(
+            format: BarcodeFormat.qrCode,
+            rawValue: 'https://ignored-qr.com',
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Karcis Berhasil Dipindai'), findsNothing);
+
+    // Now simulate detection of a 1D Code128 Barcode while in Barcode mode -> Must open confirmation sheet!
+    mobileScanner.onDetect!(
+      const BarcodeCapture(
+        barcodes: [
+          Barcode(
+            format: BarcodeFormat.code128,
+            rawValue: 'PRK-BARCODE-889900',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify confirmation bottom sheet is displayed with barcode format badge
+    expect(find.text('Karcis Berhasil Dipindai'), findsOneWidget);
+    expect(find.text('PRK-BARCODE-889900'), findsOneWidget);
+    expect(find.text('Barcode (Code 128)'), findsOneWidget);
+    expect(find.text('Simpan Karcis'), findsOneWidget);
+
+    // Tap "Simpan Karcis"
+    await tester.tap(find.text('Simpan Karcis'));
+    await tester.runAsync(() async {
+      await tester.pump();
+      await Future.delayed(const Duration(milliseconds: 200));
+    });
+    await tester.pumpAndSettle();
+
+    // Verify ticket saved in provider with barcode format
+    expect(provider.tickets.length, 1);
+    expect(provider.tickets.first.rawCode, 'PRK-BARCODE-889900');
+    expect(provider.tickets.first.format, 'code128');
+
+    provider.dispose();
+  });
+
+  testWidgets('ScanScreen onDetect is blocked when manual input dialog is open', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await SettingsService.init();
+    final provider = ParkingProvider(settings, autoStartTicker: false);
+    await tester.runAsync(() async {
+      await provider.loadTickets();
+    });
+
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: provider,
+        child: const MaterialApp(
+          home: ScanScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Open manual input dialog
+    await tester.tap(find.text('Input Kode Manual'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Input Kode Karcis Manual'), findsOneWidget);
+
+    final scannerFinder = find.byType(MobileScanner);
+    final mobileScanner = tester.widget<MobileScanner>(scannerFinder);
+
+    // Fire detection while dialog is open -> Should be blocked!
+    mobileScanner.onDetect!(
+      const BarcodeCapture(
+        barcodes: [
+          Barcode(
+            format: BarcodeFormat.code128,
+            rawValue: 'BACKGROUND-DETECTION-BLOCKED',
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    // Still on manual dialog, save ticket sheet did NOT pop
+    expect(find.text('Input Kode Karcis Manual'), findsOneWidget);
+    expect(find.text('Karcis Berhasil Dipindai'), findsNothing);
 
     provider.dispose();
   });
